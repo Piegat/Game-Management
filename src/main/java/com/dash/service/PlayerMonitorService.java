@@ -4,16 +4,20 @@ import com.dash.entity.Player;
 import com.dash.entity.Server;
 import com.dash.repository.PlayerRepository;
 import com.dash.repository.ServerRepository;
+import org.influxdb.InfluxDB;
+import org.influxdb.dto.BatchPoints;
+
+import org.influxdb.dto.Point;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 import com.fasterxml.jackson.databind.JsonNode;
-import java.time.Duration;
-import java.time.LocalDateTime;
 import java.util.List;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
+
 
 @Service
 public class PlayerMonitorService {
@@ -24,18 +28,19 @@ public class PlayerMonitorService {
     @Autowired
     private ServerRepository serverRepository;
 
-    private final RestTemplate restTemplate = new RestTemplate();
-    private final String baseUrl = "https://servers-frontend.fivem.net/api/servers/single/";
+    private InfluxDB influxDB;
 
-    private final Map<String, LocalDateTime> playerStartTimes = new HashMap<>();
+    private final RestTemplate restTemplate = new RestTemplate();
+
     private final Map<String, Boolean> playerStatus = new HashMap<>();
 
-    @Scheduled(fixedRate = 15000)
+    @Scheduled(fixedRate = 15000)  // Verifica a cada 15 segundos
     public void checkPlayerStatus() {
         List<Server> servers = serverRepository.findAll();
 
-        for(Server server : servers) {
+        for (Server server : servers) {
             try {
+                String baseUrl = "https://servers-frontend.fivem.net/api/servers/single/";
                 String url = baseUrl + server.getIp();
 
                 JsonNode response = restTemplate.getForObject(url, JsonNode.class);
@@ -48,9 +53,11 @@ public class PlayerMonitorService {
                     String playerLicense = dbPlayer.getLicense();
                     boolean isPlayerOnline = false;
 
+                    // Verifica se o jogador está na lista do servidor (online)
                     for (JsonNode player : playersList) {
                         for (JsonNode identifier : player.path("identifiers")) {
                             if (identifier.asText().startsWith("license:") && identifier.asText().equals("license:" + playerLicense)) {
+                                System.out.println(player.path("name").asText());
                                 isPlayerOnline = true;
                                 break;
                             }
@@ -60,31 +67,9 @@ public class PlayerMonitorService {
                         }
                     }
 
-                    if (isPlayerOnline && (playerStatus.getOrDefault(playerLicense, false) == false)) {
-                        playerStatus.put(playerLicense, true);
-                        playerStartTimes.put(playerLicense, LocalDateTime.now());
-                        System.out.println("O jogador " + dbPlayer.getName() + " com license " + playerLicense + " está online  no servidor:" + server.getName() + ". Início marcado.");
-                    }
-                    else if (isPlayerOnline && playerStatus.getOrDefault(playerLicense, false)) {
-                        Duration elapsedTime = Duration.between(playerStartTimes.get(playerLicense), LocalDateTime.now());
-                        System.out.println("O jogador " + dbPlayer.getName() + " com license " + playerLicense + " está online há " + elapsedTime.toMinutes() + " minutos no servidor: " + server.getName());
-                        Long time_played;
-                        if(dbPlayer.getMinutes_played() == null){
-                            time_played = elapsedTime.toMinutes();
-                        }else {
-                            time_played = dbPlayer.getMinutes_played() + elapsedTime.toMinutes();
-                        }
-                        dbPlayer.setMinutes_played(time_played);
-                        playerRepository.save(dbPlayer);
-                    }
-                    else if (!isPlayerOnline && playerStatus.getOrDefault(playerLicense, false)) {
-                        playerStatus.put(playerLicense, false);
-                        Duration elapsedTime = Duration.between(playerStartTimes.get(playerLicense), LocalDateTime.now());
-                        System.out.println("O jogador " + dbPlayer.getName() + " com license " + playerLicense + " ficou offline. Estava online por " + elapsedTime.toMinutes() + " minutos  no servidor: " + server.getName());
-                        playerStartTimes.remove(playerLicense);
-                    } else {
-                        System.out.println("O jogador " + dbPlayer.getName() + "  com license " + playerLicense + " está offline no servidor: " + server.getName());
-                    }
+                    // A cada execução, registra o status atual (online/offline)
+                    logPlayerStatus(dbPlayer.getLicense(), isPlayerOnline, server.getName(), dbPlayer.getName());
+                    playerStatus.put(playerLicense, isPlayerOnline); // Atualiza o status
                 }
 
             } catch (Exception e) {
@@ -92,4 +77,23 @@ public class PlayerMonitorService {
             }
         }
     }
+
+    private void logPlayerStatus(String playerLicense, boolean isOnline, String serverName, String name) {
+
+        BatchPoints.Builder batchPointsBuilder = BatchPoints.database("gaming");
+
+        Point point = Point.measurement("player_online")
+                .tag("server", serverName)
+                .time(System.currentTimeMillis(), TimeUnit.MILLISECONDS)
+                .addField("name", name)
+                .addField("player_license", playerLicense)
+                .addField("status", isOnline ? "online" : "offline")
+                .build();
+
+                batchPointsBuilder.point(point);
+
+        influxDB.write(batchPointsBuilder.build());
+
+    }
+
 }
