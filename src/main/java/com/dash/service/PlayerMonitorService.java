@@ -22,17 +22,18 @@ import java.util.concurrent.TimeUnit;
 @Service
 public class PlayerMonitorService {
 
-    @Autowired
-    private PlayerRepository playerRepository;
-
-    @Autowired
-    private ServerRepository serverRepository;
-
-    private InfluxDB influxDB;
-
+    private final PlayerRepository playerRepository;
+    private final ServerRepository serverRepository;
+    private final InfluxDB influxDB;
     private final RestTemplate restTemplate = new RestTemplate();
-
     private final Map<String, Boolean> playerStatus = new HashMap<>();
+
+
+    public PlayerMonitorService(PlayerRepository playerRepository, ServerRepository serverRepository, InfluxDB influxDB) {
+        this.playerRepository = playerRepository;
+        this.serverRepository = serverRepository;
+        this.influxDB = influxDB;
+    }
 
     @Scheduled(fixedRate = 15000)  // Verifica a cada 15 segundos
     public void checkPlayerStatus() {
@@ -44,7 +45,6 @@ public class PlayerMonitorService {
                 String url = baseUrl + server.getIp();
 
                 JsonNode response = restTemplate.getForObject(url, JsonNode.class);
-
                 JsonNode playersList = response.path("Data").path("players");
 
                 List<Player> playerList = playerRepository.findAll();
@@ -57,7 +57,6 @@ public class PlayerMonitorService {
                     for (JsonNode player : playersList) {
                         for (JsonNode identifier : player.path("identifiers")) {
                             if (identifier.asText().startsWith("license:") && identifier.asText().equals("license:" + playerLicense)) {
-                                System.out.println(player.path("name").asText());
                                 isPlayerOnline = true;
                                 break;
                             }
@@ -67,7 +66,7 @@ public class PlayerMonitorService {
                         }
                     }
 
-                    // A cada execução, registra o status atual (online/offline)
+                    // Registra o status atual (online/offline)
                     logPlayerStatus(dbPlayer.getLicense(), isPlayerOnline, server.getName(), dbPlayer.getName());
                     playerStatus.put(playerLicense, isPlayerOnline); // Atualiza o status
                 }
@@ -79,21 +78,18 @@ public class PlayerMonitorService {
     }
 
     private void logPlayerStatus(String playerLicense, boolean isOnline, String serverName, String name) {
-
         BatchPoints.Builder batchPointsBuilder = BatchPoints.database("gaming");
 
         Point point = Point.measurement("player_online")
                 .tag("server", serverName)
                 .time(System.currentTimeMillis(), TimeUnit.MILLISECONDS)
-                .addField("name", name)
-                .addField("player_license", playerLicense)
-                .addField("status", isOnline ? "online" : "offline")
+                .tag("name", name)
+                .tag("player_license", playerLicense)
+                .addField("status", isOnline ? 1 : -1)
                 .build();
 
-                batchPointsBuilder.point(point);
+        batchPointsBuilder.point(point);
 
         influxDB.write(batchPointsBuilder.build());
-
     }
-
 }
