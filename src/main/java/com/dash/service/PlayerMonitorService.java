@@ -67,7 +67,8 @@ public class PlayerMonitorService {
                     }
 
                     // Registra o status atual (online/offline)
-                    logPlayerStatus(dbPlayer.getLicense(), isPlayerOnline, server.getName(), dbPlayer.getName());
+                    logPlayerStatus(isPlayerOnline, server.getName(), dbPlayer.getName());
+                    logPlayer( isPlayerOnline, server.getName(), dbPlayer.getName());
                     playerStatus.put(playerLicense, isPlayerOnline); // Atualiza o status
                 }
 
@@ -77,14 +78,28 @@ public class PlayerMonitorService {
         }
     }
 
-    private void logPlayerStatus(String playerLicense, boolean isOnline, String serverName, String name) {
-        BatchPoints.Builder batchPointsBuilder = BatchPoints.database("gaming");
+    private void logPlayerStatus(boolean isOnline, String serverName, String name) {
+        BatchPoints.Builder batchPointsBuilder = BatchPoints.database("status");
 
         Point point = Point.measurement("player_online")
+                .tag("name", name)
                 .tag("server", serverName)
                 .time(System.currentTimeMillis(), TimeUnit.MILLISECONDS)
-                .tag("name", name)
-                .tag("player_license", playerLicense)
+                .addField("status", isOnline ? 1 : -1)
+                .build();
+
+        batchPointsBuilder.point(point);
+
+        influxDB.write(batchPointsBuilder.build());
+    }
+
+    private void logPlayer(boolean isOnline, String serverName, String name) {
+        BatchPoints.Builder batchPointsBuilder = BatchPoints.database("status");
+
+        Point point = Point.measurement("player_status")
+                .tag("player", name)
+                .time(System.currentTimeMillis(), TimeUnit.MILLISECONDS)
+                .tag("server", serverName)
                 .addField("status", isOnline ? 1 : -1)
                 .build();
 
