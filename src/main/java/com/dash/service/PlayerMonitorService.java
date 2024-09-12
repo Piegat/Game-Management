@@ -8,14 +8,14 @@ import org.influxdb.InfluxDB;
 import org.influxdb.dto.BatchPoints;
 
 import org.influxdb.dto.Point;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 import com.fasterxml.jackson.databind.JsonNode;
+
+import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
-import java.util.HashMap;
-import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
 
@@ -26,7 +26,6 @@ public class PlayerMonitorService {
     private final ServerRepository serverRepository;
     private final InfluxDB influxDB;
     private final RestTemplate restTemplate = new RestTemplate();
-    private final Map<String, Boolean> playerStatus = new HashMap<>();
 
 
     public PlayerMonitorService(PlayerRepository playerRepository, ServerRepository serverRepository, InfluxDB influxDB) {
@@ -35,9 +34,10 @@ public class PlayerMonitorService {
         this.influxDB = influxDB;
     }
 
-    @Scheduled(fixedRate = 15000)  // Verifica a cada 15 segundos
+    @Scheduled(fixedRate = 15000)
     public void checkPlayerStatus() {
         List<Server> servers = serverRepository.findAll();
+        TimeUnit timeUnit = TimeUnit.MILLISECONDS;
 
         for (Server server : servers) {
             try {
@@ -49,11 +49,11 @@ public class PlayerMonitorService {
 
                 List<Player> playerList = playerRepository.findAll();
 
+                List<BatchPoints.Builder> batchPointsList = new ArrayList<>();
                 for (Player dbPlayer : playerList) {
                     String playerLicense = dbPlayer.getLicense();
                     boolean isPlayerOnline = false;
 
-                    // Verifica se o jogador está na lista do servidor (online)
                     for (JsonNode player : playersList) {
                         for (JsonNode identifier : player.path("identifiers")) {
                             if (identifier.asText().startsWith("license:") && identifier.asText().equals("license:" + playerLicense)) {
@@ -66,11 +66,11 @@ public class PlayerMonitorService {
                         }
                     }
 
-                    // Registra o status atual (online/offline)
-                    logPlayerStatus(isPlayerOnline, server.getName(), dbPlayer.getName());
-                    logPlayer( isPlayerOnline, server.getName(), dbPlayer.getName());
-                    playerStatus.put(playerLicense, isPlayerOnline); // Atualiza o status
+                    logPlayer( isPlayerOnline, server.getName(), dbPlayer.getName(), timeUnit);
+                    logPlayerStatus(isPlayerOnline, server.getName(), dbPlayer.getName(), timeUnit);
+
                 }
+
 
             } catch (Exception e) {
                 System.out.println("Erro ao fazer requisição: " + e.getMessage());
@@ -78,13 +78,14 @@ public class PlayerMonitorService {
         }
     }
 
-    private void logPlayerStatus(boolean isOnline, String serverName, String name) {
-        BatchPoints.Builder batchPointsBuilder = BatchPoints.database("status");
+
+    private void logPlayerStatus(boolean isOnline, String serverName, String name, TimeUnit timeUnit) {
+        BatchPoints.Builder batchPointsBuilder = BatchPoints.database("status_test");
 
         Point point = Point.measurement("player_online")
                 .tag("name", name)
                 .tag("server", serverName)
-                .time(System.currentTimeMillis(), TimeUnit.MILLISECONDS)
+                .time(System.currentTimeMillis(), timeUnit)
                 .addField("status", isOnline ? 1 : -1)
                 .build();
 
@@ -93,12 +94,12 @@ public class PlayerMonitorService {
         influxDB.write(batchPointsBuilder.build());
     }
 
-    private void logPlayer(boolean isOnline, String serverName, String name) {
-        BatchPoints.Builder batchPointsBuilder = BatchPoints.database("status");
+    private void logPlayer(boolean isOnline, String serverName, String name, TimeUnit timeUnit) {
+        BatchPoints.Builder batchPointsBuilder = BatchPoints.database("status_test");
 
         Point point = Point.measurement("player_status")
                 .tag("player", name)
-                .time(System.currentTimeMillis(), TimeUnit.MILLISECONDS)
+                .time(System.currentTimeMillis(), timeUnit)
                 .tag("server", serverName)
                 .addField("status", isOnline ? 1 : -1)
                 .build();
