@@ -101,7 +101,7 @@ public class PlayerMonitorService {
                 .tag("player", name)
                 .time(System.currentTimeMillis(), timeUnit)
                 .tag("server", serverName)
-                .addField("status", isOnline ? 1 : -1)
+                .addField("status", isOnline ? 1 : 0)
                 .build();
 
         batchPointsBuilder.point(point);
