@@ -31,9 +31,6 @@ public class InfluxdbRepository implements TimeSeriesRepository {
 
         batchPointsBuilder.point(point);
 
-
-
-
         influxDB.write(batchPointsBuilder.build());
     }
 

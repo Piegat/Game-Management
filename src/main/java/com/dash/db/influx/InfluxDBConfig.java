@@ -1,7 +1,5 @@
 package com.dash.db.influx;
 
-import com.dash.db.influx.repositories.InfluxdbRepository;
-import com.dash.db.influx.repositories.TimeSeriesRepository;
 import okhttp3.OkHttpClient;
 import org.influxdb.InfluxDB;
 import org.influxdb.InfluxDBFactory;

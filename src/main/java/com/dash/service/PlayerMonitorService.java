@@ -13,7 +13,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 import com.fasterxml.jackson.databind.JsonNode;
 
-import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
@@ -49,7 +48,6 @@ public class PlayerMonitorService {
 
                 List<Player> playerList = playerRepository.findAll();
 
-                List<BatchPoints.Builder> batchPointsList = new ArrayList<>();
                 for (Player dbPlayer : playerList) {
                     String playerLicense = dbPlayer.getLicense();
                     boolean isPlayerOnline = false;
@@ -66,7 +64,6 @@ public class PlayerMonitorService {
                         }
                     }
 
-                    logPlayer( isPlayerOnline, server.getName(), dbPlayer.getName(), timeUnit);
                     logPlayerStatus(isPlayerOnline, server.getName(), dbPlayer.getName(), timeUnit);
 
                 }
@@ -86,7 +83,7 @@ public class PlayerMonitorService {
                 .tag("name", name)
                 .tag("server", serverName)
                 .time(System.currentTimeMillis(), timeUnit)
-                .addField("status", isOnline ? 1 : -1)
+                .addField("status", isOnline ? 1 :0)
                 .build();
 
         batchPointsBuilder.point(point);
@@ -94,18 +91,4 @@ public class PlayerMonitorService {
         influxDB.write(batchPointsBuilder.build());
     }
 
-    private void logPlayer(boolean isOnline, String serverName, String name, TimeUnit timeUnit) {
-        BatchPoints.Builder batchPointsBuilder = BatchPoints.database("status_test");
-
-        Point point = Point.measurement("player_status")
-                .tag("player", name)
-                .time(System.currentTimeMillis(), timeUnit)
-                .tag("server", serverName)
-                .addField("status", isOnline ? 1 : 0)
-                .build();
-
-        batchPointsBuilder.point(point);
-
-        influxDB.write(batchPointsBuilder.build());
-    }
 }

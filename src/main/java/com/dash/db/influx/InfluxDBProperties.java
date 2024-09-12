@@ -10,7 +10,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 public class InfluxDBProperties {
 
     private String url;
-    private String token;  // Adicione o campo do token
+    private String token;
     private String database;
 
 }
