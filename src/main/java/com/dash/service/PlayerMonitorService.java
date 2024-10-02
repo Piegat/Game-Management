@@ -33,16 +33,19 @@ public class PlayerMonitorService {
         this.influxDB = influxDB;
     }
 
-    @Scheduled(fixedRate = 15000)
+    @Scheduled(fixedRate = 30000)
     public void checkPlayerStatus() {
         List<Server> servers = serverRepository.findAll();
         TimeUnit timeUnit = TimeUnit.MILLISECONDS;
 
+        int count = 1;
+
         for (Server server : servers) {
             try {
+                System.out.println("Servidores verificados: " + count + " Total de servidores: " + servers.size());
+
                 String baseUrl = "https://servers-frontend.fivem.net/api/servers/single/";
                 String url = baseUrl + server.getIp();
-
                 JsonNode response = restTemplate.getForObject(url, JsonNode.class);
                 JsonNode playersList = response.path("Data").path("players");
 
@@ -68,6 +71,8 @@ public class PlayerMonitorService {
 
                 }
 
+                Thread.sleep(1000);
+                count += 1;
 
             } catch (Exception e) {
                 System.out.println("Erro ao fazer requisição: " + e.getMessage());
@@ -77,8 +82,7 @@ public class PlayerMonitorService {
 
 
     private void logPlayerStatus(boolean isOnline, String serverName, String name, TimeUnit timeUnit) {
-        BatchPoints.Builder batchPointsBuilder = BatchPoints.database("status_test");
-
+        BatchPoints.Builder batchPointsBuilder = BatchPoints.database("gaming");
         Point point = Point.measurement("player_online")
                 .tag("name", name)
                 .tag("server", serverName)
